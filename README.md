@@ -17,6 +17,8 @@
 
 <p>
 Команда для крона:
+
 ```docker run --rm --env-file /home/app/asuk/app/data/csv_stat/.env --network rtt -v /home/app/asuk/app/data/csv_stat/:/app/data csv-stat:0.0.1```
+
 <br/>
 Обрати внимание на название докер сети (rtt), должна совпадать с той, которая указана в компоузе, которым поднимается платформа. 
