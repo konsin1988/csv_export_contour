@@ -1,0 +1,7 @@
+sqlalchemy==2.0.41
+pandas==2.2.3
+numpy==1.26.4
+pymysql==1.1.1
+cryptography==38.0.4
+python-dotenv==1.0.0
+python-dateutil==2.9.0
