@@ -361,6 +361,24 @@ func main() {
 	dbName := os.Getenv("DB_NAME")
 	periodStart := os.Getenv("PERIOD_START")
 	periodEnd := os.Getenv("PERIOD_END")
+	var whereString string;
+
+	if periodStart != "" && periodEnd != "" {
+		whereString = fmt.Sprintf(`
+			where period >= '%s'
+			and period < '%s'
+		`, periodStart, periodEnd)
+	} else if periodStart == "" && periodEnd != "" {
+		whereString = fmt.Sprintf(`
+			where period < '%s'
+		`, periodEnd)
+	} else if periodStart != "" && periodEnd == "" {
+		whereString = fmt.Sprintf(`
+			where period >= '%s'
+		`, periodStart )
+	} else {
+		whereString = ""
+	}
 
 	queryRA := fmt.Sprintf(`
 	select
@@ -396,10 +414,9 @@ func main() {
 		sum(ra.field2) as Warranty_Product
 	from %s.companies c 
 	join %s.formDataRA ra on c.id = ra.companyId
-	where ra.period >= '%s'
-	and ra.period < '%s'
+	%s
 	group by c.id, c.name, c.inn, year(ra.period), ra.period
-	`, dbName, dbName, periodStart, periodEnd)
+	`, dbName, dbName, whereString)
 
 	queryOZ := fmt.Sprintf(`
 	select 
@@ -414,10 +431,9 @@ func main() {
 		sum(oz.field7) as Post_Sale_Repair_Costs
 	from %s.companies c 
 	join %s.formDataOZ oz on c.id = oz.companyId 
-	where oz.period >= '%s'
-	and oz.period < '%s'
+	%s
 	group by c.id, c.name, c.inn, year(oz.period), oz.period 
-	`, dbName, dbName, periodStart, periodEnd)
+	`, dbName, dbName, whereString)
 
 	queryRCP := fmt.Sprintf(`
 	select
@@ -432,10 +448,9 @@ func main() {
 		sum(rcp.field7) as Products_Requiring_Restoration
 	from %s.companies c 
 	join %s.formDataRCP rcp on c.id = rcp.companyId  
-	where rcp.period >= '%s'
-	and rcp.period < '%s'
+	%s
 	group by c.id, c.name, c.inn, year(rcp.period)
-	`, dbName, dbName, periodStart, periodEnd)
+	`, dbName, dbName, whereString)
 
 	ra, err := worker.readQuery(queryRA, raMetrics)
 	if err != nil {
