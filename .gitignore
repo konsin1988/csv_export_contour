@@ -3,3 +3,6 @@
 /notebook
 /data
 /**/*_dump.sql
+/**/stat.csv
+/**/script
+/**/inner_script
