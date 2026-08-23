@@ -32,10 +32,15 @@ class Worker:
     def result_filepath(self):
         return os.getenv("BASEDIR") + os.getenv("RESULT_FILEPATH")
 
+    @property
+    def db_name(self):
+        user, password, host, port, db_name = self.__load_env()
+        return db_name 
+
     def __set_engine(self):
         user, password, host, port, db_name = self.__load_env()
         password = ":" + password if len(password) > 0 else ""
-        self.__engine = create_engine(f"mysql+pymysql://{user}@{host}:{port}/{db_name}")
+        self.__engine = create_engine(f"mysql+pymysql://{user}@mysql/{db_name}")
 
     def read_query(self, query):
         with self.__engine.connect() as conn:
@@ -61,7 +66,8 @@ class Worker:
 
 def main():
     worker = Worker()
-    query_ra = r"""
+    db_name = worker.db_name
+    query_ra = fr"""
     select
     	c.id as companyId, c.name, c.inn,
     	year(ra.period) as year,
@@ -93,12 +99,12 @@ def main():
     	sum(ra.field22) as Usage_Defects_Total,
     	sum(ra.field21) as Usage_PKI_Defect_Total,
     	sum(ra.field2) as Warranty_Product
-    from asuk_csv_export.companies c 
-    join asuk_csv_export.formDataRA ra on c.id = ra.companyId
+    from {db_name}.companies c 
+    join {db_name}.formDataRA ra on c.id = ra.companyId
     group by c.id, c.name, c.inn, year(ra.period), ra.period
     """
     
-    query_oz = r"""
+    query_oz = fr"""
     select 
     	c.id as companyId, c.name, c.inn,
     	year(oz.period) as year,
@@ -109,12 +115,12 @@ def main():
     		when month(oz.period) = 12 then 'Q4' end as period,
     	sum(oz.field13) as Cost_Calculator,
     	sum(oz.field7) as Post_Sale_Repair_Costs
-    from asuk_csv_export.companies c 
-    join asuk_csv_export.formDataOZ oz on c.id = oz.companyId 
+    from {db_name}.companies c 
+    join {db_name}.formDataOZ oz on c.id = oz.companyId 
     group by c.id, c.name, c.inn, year(oz.period), oz.period 
     """
     
-    query_rcp = r"""
+    query_rcp = fr"""
     select
     	c.id as companyId, c.name, c.inn,
     	year(rcp.period) as year,
@@ -125,8 +131,8 @@ def main():
     	sum(rcp.field8) as One_Time_Restored_Count,
     	sum(rcp.field1) as Product_Defect_Fatality_Monitor,
     	sum(rcp.field7) as Products_Requiring_Restoration
-    from asuk_csv_export.companies c 
-    join asuk_csv_export.formDataRCP rcp on c.id = rcp.companyId  
+    from {db_name}.companies c 
+    join {db_name}.formDataRCP rcp on c.id = rcp.companyId  
     group by c.id, c.name, c.inn, year(rcp.period)
     """
 

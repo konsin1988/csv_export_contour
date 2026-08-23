@@ -1,16 +1,20 @@
-Экспорт csv файла со статистикой по Асуку. 
+# Экспорт csv файла со статистикой по Асуку. 
+
+## Вариант 1
 
 <p>
 2) в папке /home/app/asuk/app/data/ создаём папку csv_stat со следующим содержимым:
     - файл .env:
-       <br/> DB_HOST=mysql
-        <br/>DB_PORT=3306
-        <br/>DB_USER=root
+       <br/> DB_HOST=
+        <br/>DB_PORT=
+        <br/>DB_USER=
         <br/>DB_PASSWORD=
-        <br/>DB_NAME=asuk_csv_export
-        <br/>BASEDIR=/app/data
+        <br/>DB_NAME=
+        <br/>BASEDIR=/csv_export
         <br/>COMPANY_FILEPATH=/companies.csv
         <br/>RESULT_FILEPATH=/stat.csv
+        <br/>PERIOD_START=2024-03-01
+        <br/>PERIOD_END=2024-06-01
     - файл companies.csv, с компаниям. Название файла принципиально.
     - В этой же папке будет сохраняться результат обработки - stat.csv.
 </p>
@@ -18,7 +22,25 @@
 <p>
 Команда для крона:
 
-```docker run --rm --env-file /home/app/asuk/app/data/csv_stat/.env --network rtt -v /home/app/asuk/app/data/csv_stat/:/app/data csv-stat:0.0.1```
+```docker run --rm --security-opt seccomp=unconfined --env-file /home/app/asuk/app/data/csv_stat/.env --network rtt -v /home/app/asuk/app/data/csv_stat/:/app/data csv-stat:0.0.3```
 
 <br/>
 Обрати внимание на название докер сети (rtt), должна совпадать с той, которая указана в компоузе, которым поднимается платформа. 
+
+## Вариант 2 (без expose)
+
+> Скрипт на go. Формируем бинарник. Далее bash скриптом создаём временную папку внутри контейнера mysql, копируем companies.csv,  .env  и сам бинарник в эту папку (внутрь контейнера), с помощью docker exec запускаем скрипт внутри контейнера, копируем результат наружу контейнера и удаляем временную папку.  
+
+## Вариаент 3 (без expose)
+
+> Создаём процедуру в mysql для выгрузки данных в csv. В этом вариаете есть одна проблема: нужно удалять созданный файл, mysql не умеет перезаписывать и будет падать в ошибку при file already exists.
+
+## Вариант 4 (c expose)
+
+> Скрипт на go. Собираем бинарник. Файл companies.csv и .env должны быть в той же папке, что и сам исполняемый файл. Запускаем. 
+
+
+#### Везде нужно учитывать переменные среды:
+- Если мы запускаем исполнение внутри контейнера, то host - localhost
+- Если мы запускуем из докер контейнера, то host - mysql (в той же сети)
+- Если мы всё же открываем порт наружу и запускаем скрипт с хоста, то host - localhost.

@@ -1,0 +1,6 @@
+.git
+.gitignore
+*.tar
+data/
+notebook/
+.env

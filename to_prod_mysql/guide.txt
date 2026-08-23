@@ -1,0 +1,11 @@
+1. Create volume for mysql:
+  - ./mysql-files:/var/lib/mysql-files
+
+2. Copy to this volume companies.csv
+
+3. Run anywhere:
+  - docker exec -i mysql mysql -u root asukrtinform_3 < ./script.sql
+
+4. Result file in volume ./mysql-files/result.csv
+
+5. Delete result.csv before run the script next time
