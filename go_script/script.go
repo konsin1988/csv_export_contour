@@ -318,7 +318,8 @@ func formatValue(v float64, null bool) string {
 	if null {
 		return ""
 	}
-	return pyRepr(v)
+	return strconv.FormatFloat(v, 'f', -1, 64)
+	//return pyRepr(v)
 }
 
 func writeResult(path string, rows []Result) error {
