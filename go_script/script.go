@@ -8,9 +8,10 @@ import (
 	"log"
 	"math"
 	"os"
-	"sort"
+	_ "sort"
 	"strconv"
 	"strings"
+	"time"
 
 	_ "github.com/go-sql-driver/mysql"
 )
@@ -78,6 +79,12 @@ type Company struct {
 	Inn  int64
 }
 
+type CompanyInfo struct {
+	Hash string
+	Name string
+	Inn int64
+}
+
 type Result struct {
 	Hash      string
 	Name      string
@@ -89,6 +96,11 @@ type Result struct {
 	ValueNull bool
 }
 
+type YearPeriod struct {
+	Year   int64
+	Period string
+}
+
 type Worker struct {
 	db *sql.DB
 }
@@ -98,7 +110,7 @@ func loadDotEnv(path string) error {
 	if err != nil {
 		return err
 	}
-	for _, line := range strings.Split(string(data), "\n") {
+	for line := range strings.SplitSeq(string(data), "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
@@ -155,7 +167,7 @@ func (w *Worker) readQuery(query string, metrics []string) ([]Row, error) {
 	defer rows.Close()
 
 	values := make([]sql.NullFloat64, len(metrics))
-	scanArgs := make([]interface{}, 5+len(metrics))
+	scanArgs := make([]any, 5+len(metrics))
 	var companyID, year int64
 	var name, inn, period string
 	scanArgs[0] = &companyID
@@ -190,6 +202,59 @@ func (w *Worker) readQuery(query string, metrics []string) ([]Row, error) {
 	}
 	return out, rows.Err()
 }
+
+func getPeriodRange() []YearPeriod {
+	startStr := os.Getenv("PERIOD_START")
+	endStr := os.Getenv("PERIOD_END")
+
+	// Defaults
+	start := time.Date(2022, 1, 1, 0, 0, 0, 0, time.UTC)
+	end := time.Now()
+
+	var err error
+
+	if startStr != "" {
+		start, err = time.Parse("2006-01-02", startStr)
+		if err != nil {
+			log.Fatalf("invalid PERIOD_START: %v", err)
+		}
+	}
+
+	if endStr != "" {
+		end, err = time.Parse("2006-01-02", endStr)
+		if err != nil {
+			log.Fatalf("invalid PERIOD_END: %v", err)
+		}
+	}
+
+	startYear, startQuarter := start.Year(), (int(start.Month())-1)/3+1
+	endYear, endQuarter := end.Year(), (int(end.Month())-1)/3+1
+
+	var result []YearPeriod
+
+	for year := startYear; year <= endYear; year++ {
+		firstQuarter := 1
+		lastQuarter := 4
+
+		if year == startYear {
+			firstQuarter = startQuarter
+		}
+
+		if year == endYear {
+			lastQuarter = endQuarter
+		}
+
+		for quarter := firstQuarter; quarter <= lastQuarter; quarter++ {
+			result = append(result, YearPeriod{
+				Year:   int64(year),
+				Period: fmt.Sprintf("Q%d", quarter),
+			})
+		}
+	}
+
+	return result
+}
+
 
 func readCompanies(path string) ([]Company, error) {
 	f, err := os.Open(path)
@@ -260,26 +325,126 @@ func readCompanies(path string) ([]Company, error) {
 	return out, nil
 }
 
-func mergeInner(companies []Company, concated []Row) []Result {
-	byInn := make(map[int64][]Row)
-	for _, row := range concated {
-		byInn[row.Inn] = append(byInn[row.Inn], row)
+func mergeCompanies(companies []Company, concated []Row) []CompanyInfo {
+	byInn := make(map[int64]Company, len(companies))
+
+	for _, company := range companies {
+		byInn[company.Inn] = company
 	}
-	var out []Result
-	for _, c := range companies {
-		for _, row := range byInn[c.Inn] {
-			out = append(out, Result{
-				Hash:      c.Hash,
-				Name:      row.Name,
-				Inn:       row.Inn,
-				Year:      row.Year,
-				Period:    row.Period,
-				Score:     row.Score,
-				Value:     row.Value,
-				ValueNull: row.ValueNull,
-			})
+
+	// Hash -> ConcatedCompany.
+	// Map guarantees that Hash is unique.
+	byHash := make(map[string]CompanyInfo)
+
+	for _, row := range concated {
+		company, exists := byInn[row.Inn]
+		if !exists {
+			continue
+		}
+
+		if _, exists := byHash[company.Hash]; exists {
+			continue
+		}
+
+		byHash[company.Hash] = CompanyInfo{
+			Hash: company.Hash,
+			Name: row.Name,
+			Inn:  row.Inn,
 		}
 	}
+
+	result := make([]CompanyInfo, 0, len(byHash))
+
+	for _, company := range byHash {
+		result = append(result, company)
+	}
+	return result
+}
+
+func mergeInner(
+	companies []CompanyInfo,
+	concated []Row,
+	periods []YearPeriod,
+	metrics []string,
+) []Result {
+
+	type key struct {
+		hash   string
+		year   int64
+		period string
+		score  string
+	}
+
+	// Existing metric data.
+	byKey := make(map[key]Row, len(concated))
+
+	// We need to know which Hash belongs to which Row.
+	// Build Inn -> Hash from ConcatedCompany.
+	hashByInn := make(map[int64]string, len(companies))
+
+	for _, company := range companies {
+		hashByInn[company.Inn] = company.Hash
+	}
+
+	for _, row := range concated {
+		hash, exists := hashByInn[row.Inn]
+		if !exists {
+			continue
+		}
+
+		k := key{
+			hash:   hash,
+			year:   row.Year,
+			period: row.Period,
+			score:  row.Score,
+		}
+
+		byKey[k] = row
+	}
+
+	var out []Result
+
+	for _, company := range companies {
+		for _, p := range periods {
+			for _, metric := range metrics {
+
+				k := key{
+					hash:   company.Hash,
+					year:   p.Year,
+					period: p.Period,
+					score:  metric,
+				}
+
+				row, exists := byKey[k]
+
+				if exists {
+					// Existing data.
+					out = append(out, Result{
+						Hash:      company.Hash,
+						Name:      company.Name,
+						Inn:       company.Inn,
+						Year:      row.Year,
+						Period:    row.Period,
+						Score:     row.Score,
+						Value:     row.Value,
+						ValueNull: row.ValueNull,
+					})
+				} else {
+					// Missing period/metric.
+					out = append(out, Result{
+						Hash:      company.Hash,
+						Name:      company.Name,
+						Inn:       company.Inn,
+						Year:      p.Year,
+						Period:    p.Period,
+						Score:     metric,
+						ValueNull: true,
+					})
+				}
+			}
+		}
+	}
+
 	return out
 }
 
@@ -469,26 +634,34 @@ func main() {
 	concated := append(ra, oz...)
 	concated = append(concated, rcp...)
 
-	sort.SliceStable(concated, func(i, j int) bool {
-		a, b := concated[i], concated[j]
-		if a.CompanyID != b.CompanyID {
-			return a.CompanyID < b.CompanyID
-		}
-		if a.Year != b.Year {
-			return a.Year < b.Year
-		}
-		if a.Period != b.Period {
-			return a.Period < b.Period
-		}
-		return a.Score < b.Score
-	})
-
 	companies, err := readCompanies(worker.companyFilepath())
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	result := mergeInner(companies, concated)
+	periods := getPeriodRange()
+
+	metrics := append([]string{}, raMetrics...)
+	metrics = append(metrics, ozMetrics...)
+	metrics = append(metrics, rcpMetrics...)
+
+	mergedCompanies := mergeCompanies(companies, concated)
+
+	result := mergeInner(mergedCompanies, concated, periods, metrics)
+
+	//sort.SliceStable(result, func(i, j int) bool {
+	//	a, b := result[i], result[j]
+	//	if a.CompanyID != b.CompanyID {
+	//		return a.CompanyID < b.CompanyID
+	//	}
+	//	if a.Year != b.Year {
+	//		return a.Year < b.Year
+	//	}
+	//	if a.Period != b.Period {
+	//		return a.Period < b.Period
+	//	}
+	//	return a.Score < b.Score
+	//})
 
 	if err := writeResult(worker.resultFilepath(), result); err != nil {
 		log.Fatal(err)
