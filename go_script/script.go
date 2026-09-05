@@ -308,7 +308,12 @@ func readCompanies(path string) ([]Company, error) {
 
 	out := make([]Company, 0, len(records))
 	for _, rec := range records {
+		innStr := strings.TrimSpace(rec[idxInn])
+		if innStr == "" {
+			continue
+		}
 		hash := rec[idxHash]
+
 		if numericHash {
 			n, err := strconv.ParseInt(strings.TrimSpace(hash), 10, 64)
 			if err != nil {
@@ -316,7 +321,8 @@ func readCompanies(path string) ([]Company, error) {
 			}
 			hash = strconv.FormatInt(n, 10)
 		}
-		inn, err := strconv.ParseInt(strings.TrimSpace(rec[idxInn]), 10, 64)
+		//inn, err := strconv.ParseInt(strings.TrimSpace(rec[idxInn]), 10, 64)
+		inn, err := strconv.ParseInt(innStr, 10, 64)
 		if err != nil {
 			return nil, fmt.Errorf("invalid ИНН %q: %w", rec[idxInn], err)
 		}
@@ -325,6 +331,7 @@ func readCompanies(path string) ([]Company, error) {
 	return out, nil
 }
 
+
 func mergeCompanies(companies []Company, concated []Row) []CompanyInfo {
 	byInn := make(map[int64]Company, len(companies))
 
@@ -332,8 +339,6 @@ func mergeCompanies(companies []Company, concated []Row) []CompanyInfo {
 		byInn[company.Inn] = company
 	}
 
-	// Hash -> ConcatedCompany.
-	// Map guarantees that Hash is unique.
 	byHash := make(map[string]CompanyInfo)
 
 	for _, row := range concated {
@@ -375,11 +380,8 @@ func mergeInner(
 		score  string
 	}
 
-	// Existing metric data.
 	byKey := make(map[key]Row, len(concated))
 
-	// We need to know which Hash belongs to which Row.
-	// Build Inn -> Hash from ConcatedCompany.
 	hashByInn := make(map[int64]string, len(companies))
 
 	for _, company := range companies {
@@ -481,10 +483,9 @@ func pyRepr(v float64) string {
 
 func formatValue(v float64, null bool) string {
 	if null {
-		return ""
+		return "0" 
 	}
 	return strconv.FormatFloat(v, 'f', -1, 64)
-	//return pyRepr(v)
 }
 
 func writeResult(path string, rows []Result) error {
