@@ -3,6 +3,7 @@ from sqlalchemy import create_engine
 import pymysql
 from dotenv import load_dotenv
 import os
+from datetime import datetime
 
 load_dotenv()
 
@@ -15,7 +16,47 @@ class Worker:
            'Период', 'Показатель', 
             'Значение']
 
-    def __load_env(self):
+        self.__raMetrics = [ 
+        	"Accepted_Claims",
+        	"Achieved_Reliability_Metrics",
+        	"Claims_count",
+        	"Construction_Defects_Total",
+        	"Contract_Quality_Failure_Tracker",
+        	"Deviation_Approvals_Count",
+        	"Factory_Defects_Total",
+        	"Factory_PKI_Defect_Total",
+        	"False_Defects_Total",
+        	"First_Pass_Accepted_Count",
+        	"Manufactured_Items_Total",
+        	"Mean_Time_To_Restoration",
+        	"Other_Defect_Total",
+        	"Presented_Product_Count",
+        	"Suspension_Tracker",
+        	"Target_Reliability_Metrics",
+        	"Track_Defects",
+        	"track_Factory_Defects",
+        	"track_Usage_Defects",
+        	"Unknown_Defects_Total",
+        	"Usage_Defects_Total",
+        	"Usage_PKI_Defect_Total",
+        	"Warranty_Product",
+                            ]
+        
+        self.__ozMetrics = [
+        	"Cost_Calculator",
+        	"Post_Sale_Repair_Costs",
+        ]
+        
+        self.__rcpMetrics = [
+        	"Contracts_Realize",
+        	"Cost_Product",
+        	"Fake_Product_Incidents_Counter",
+        	"One_Time_Restored_Count",
+        	"Product_Defect_Fatality_Monitor",
+        	"Products_Requiring_Restoration",
+        ]
+
+    def __load_db_env(self):
         return [
             os.getenv("DB_USER"),
             os.getenv("DB_PASSWORD"),
@@ -23,6 +64,59 @@ class Worker:
             os.getenv("DB_PORT"),
             os.getenv("DB_NAME"),
                ]
+
+    def __load_date_range_env(self):
+        period_start = os.getenv("PERIOD_START")
+        period_end = os.getenv("PERIOD_END")
+        now_dt = datetime.now()
+        first_month_of_quarter = 3 * ((now_dt.month - 1) // 3) 
+        period_now = datetime(now_dt.year, first_month_of_quarter + 3, 1).strftime("%Y-%m-%d")
+        period_first = '2019-03-01'
+
+        if period_start != "" and period_end != "": 
+	        return [period_start, period_end]
+        elif period_start == "" and period_end != "":
+	        return [period_first, period_end]
+        elif period_start != "" and period_end == "":
+	        return [period_start, period_now]
+        else:
+            return [period_first, period_now]
+
+    def __get_periods(self):
+        first_period, last_period = self.__load_date_range_env()
+        start_date = pd.to_datetime(first_period)
+        end_date = pd.to_datetime(last_period)
+        
+        years = []
+        periods = []
+        
+        for year in range(start_date.year, end_date.year + 1):
+            period_start = 1
+            period_end = 4 
+            if year == start_date.year:
+                period_start = (start_date.month - 1)//3+1 
+            if year == end_date.year:
+                period_end = (end_date.month - 1)//3+1
+            for period in range(period_start, period_end+1):
+                years += [year]
+                periods += [f"Q{period}"]
+        
+        return pd.DataFrame({"year": years, "period": periods})
+
+    @property
+    def periods(self)->pd.DataFrame:
+        periods = self.__get_periods()
+        return periods
+
+    @property
+    def where_string(self):
+        period_start, period_end = self.__load_date_range_env()
+        res = f"where period >= '{period_start}' and period < '{period_end}'"
+        return res 
+
+    @property
+    def metrics(self):
+        return pd.DataFrame({"score": self.__raMetrics + self.__ozMetrics + self.__rcpMetrics}) 
 
     @property
     def company_filepath(self):
@@ -34,13 +128,13 @@ class Worker:
 
     @property
     def db_name(self):
-        user, password, host, port, db_name = self.__load_env()
+        user, password, host, port, db_name = self.__load_db_env()
         return db_name 
 
     def __set_engine(self):
-        user, password, host, port, db_name = self.__load_env()
+        user, password, host, port, db_name = self.__load_db_env()
         password = ":" + password if len(password) > 0 else ""
-        self.__engine = create_engine(f"mysql+pymysql://{user}@mysql/{db_name}")
+        self.__engine = create_engine(f"mysql+pymysql://{user}{password}@{host}:{port}/{db_name}")
 
     def read_query(self, query):
         with self.__engine.connect() as conn:
@@ -67,6 +161,7 @@ class Worker:
 def main():
     worker = Worker()
     db_name = worker.db_name
+    where_str = worker.where_string
     query_ra = fr"""
     select
     	c.id as companyId, c.name, c.inn,
@@ -101,6 +196,7 @@ def main():
     	sum(ra.field2) as Warranty_Product
     from {db_name}.companies c 
     join {db_name}.formDataRA ra on c.id = ra.companyId
+    {where_str}
     group by c.id, c.name, c.inn, year(ra.period), ra.period
     """
     
@@ -117,6 +213,7 @@ def main():
     	sum(oz.field7) as Post_Sale_Repair_Costs
     from {db_name}.companies c 
     join {db_name}.formDataOZ oz on c.id = oz.companyId 
+    {where_str}
     group by c.id, c.name, c.inn, year(oz.period), oz.period 
     """
     
@@ -133,6 +230,7 @@ def main():
     	sum(rcp.field7) as Products_Requiring_Restoration
     from {db_name}.companies c 
     join {db_name}.formDataRCP rcp on c.id = rcp.companyId  
+    {where_str}
     group by c.id, c.name, c.inn, year(rcp.period)
     """
 
@@ -146,18 +244,36 @@ def main():
             worker.reshape(oz_df), 
             worker.reshape(rcp_df)
         ])
-        .sort_values(['companyId', 'year', 'period', 'score'])
         .assign(inn = lambda x: x['inn'].astype('int64'))
     )
 
-    result = (
+    companies = (
         pd.read_csv(worker.company_filepath)
         .rename(columns={
         'Ссылка': 'hash',
         'ИНН': 'inn'
         })
+        .dropna(subset=['inn'])
         [['hash', 'inn']]
-        .merge(concated, how='inner', on='inn')
+    )
+
+    companies_with_names = (
+        concated
+        .merge(companies, on='inn', how='inner')
+        [['hash', 'name', 'inn']]
+        .drop_duplicates(keep='first')
+    )
+
+    metrics = worker.metrics
+    periods = worker.periods
+
+
+    result = (
+        periods
+        .merge(metrics, how='cross')
+        .merge(companies_with_names, how='cross')
+        .merge(concated, on=['name', 'inn', 'year', 'period', 'score'], how='left')
+        .assign(value=lambda x: x['value'].fillna(0))
         [['hash', 'name', 'inn', 'year', 'period', 'score', 'value']]
     )
 
