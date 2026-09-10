@@ -24,43 +24,44 @@ var originColumns = []string{
 }
 
 var raMetrics = []string{
-	"Accepted_Claims",
-	"Achieved_Reliability_Metrics",
-	"Claims_count",
-	"Construction_Defects_Total",
-	"Contract_Quality_Failure_Tracker",
-	"Deviation_Approvals_Count",
-	"Factory_Defects_Total",
-	"Factory_PKI_Defect_Total",
-	"False_Defects_Total",
-	"First_Pass_Accepted_Count",
-	"Manufactured_Items_Total",
-	"Mean_Time_To_Restoration",
-	"Other_Defect_Total",
-	"Presented_Product_Count",
-	"Suspension_Tracker",
-	"Target_Reliability_Metrics",
-	"Track_Defects",
-	"track_Factory_Defects",
-	"track_Usage_Defects",
-	"Unknown_Defects_Total",
-	"Usage_Defects_Total",
-	"Usage_PKI_Defect_Total",
-	"Warranty_Product",
+		"Claims_count",
+		"Incoming_SON_Tracker",
+		"Suspension_Tracker",
+		"track_Usage_Defects",
+		"track_Factory_Defects",
+		"Post_Sale_Repair_Costs",
+		"Accepted_Claims",
+		"Construction_Defects_Total",
+		"Factory_Defects_Total",
+		"Usage_Defects_Total",
+		"Factory_PKI_Defect_Total",
+		"Usage_PKI_Defect_Total",
+		"Unknown_Defects_Total",
+		"False_Defects_Total",
+		"Other_Defect_Total",
+		"Deviation_From_CD_TD_Total",
+		"Warranty_Product",
+		"Presented_Product_Count",
+		"First_Pass_Accepted_Count",
+		"Manufactured_Items_Total",
+		"Deviation_Approvals_Count",
+		"Target_Reliability_Metrics",
+		"Achieved_Reliability_Metrics",
+		"Mean_Time_To_Restoration",
 }
 
 var ozMetrics = []string{
 	"Cost_Calculator",
-	"Post_Sale_Repair_Costs",
+	"Cost_Product",
 }
 
 var rcpMetrics = []string{
-	"Contracts_Realize",
-	"Cost_Product",
-	"Fake_Product_Incidents_Counter",
-	"One_Time_Restored_Count",
 	"Product_Defect_Fatality_Monitor",
+	"Contract_Quality_Failure_Tracker",
+	"Fake_Product_Incidents_Counter",
 	"Products_Requiring_Restoration",
+	"One_Time_Restored_Count",
+	"Contracts_Realize",
 }
 
 type Row struct {
@@ -556,29 +557,30 @@ func main() {
 			when month(ra.period) = 6 then 'Q2'
 			when month(ra.period) = 9 then 'Q3'
 			when month(ra.period) = 12 then 'Q4' end as period,
-		sum(ra.field14) as Accepted_Claims,
-		sum(ra.field11) as Achieved_Reliability_Metrics,
 		sum(ra.field13) as Claims_count,
+		sum(ra.field25) as Incoming_SON_Tracker,
+		sum(ra.field10) as Suspension_Tracker,
+		sum(ra.field162) as track_Usage_Defects,
+		sum(ra.field161) as track_Factory_Defects,
+		sum(ra.field4) as Post_Sale_Repair_Costs,
+		sum(ra.field14) as Accepted_Claims,
 		sum(ra.field18) as Construction_Defects_Total,
-		sum(ra.field9) as Contract_Quality_Failure_Tracker,
-		sum(ra.field9) as Deviation_Approvals_Count,
 		sum(ra.field19) as Factory_Defects_Total,
+		sum(ra.field22) as Usage_Defects_Total,
 		sum(ra.field20) as Factory_PKI_Defect_Total,
+		sum(ra.field21) as Usage_PKI_Defect_Total,
+		sum(ra.field23) as Unknown_Defects_Total,
 		sum(ra.field341) as False_Defects_Total,
+		sum(ra.field24) as Other_Defect_Total,
+		sum(ra.field9) as Deviation_From_CD_TD_Total,
+		sum(ra.field2) as Warranty_Product,
+		sum(ra.field6) as Presented_Product_Count,
 		sum(ra.field7) as First_Pass_Accepted_Count,
 		sum(ra.field8) as Manufactured_Items_Total,
-		sum(ra.field34) as Mean_Time_To_Restoration,
-		sum(ra.field24) as Other_Defect_Total,
-		sum(ra.field6) as Presented_Product_Count,
-		sum(ra.field10) as Suspension_Tracker,
+		sum(ra.field9) as Deviation_Approvals_Count,
 		sum(ra.field12) as Target_Reliability_Metrics,
-		sum(ra.field5) as Track_Defects,
-		sum(ra.field161) as track_Factory_Defects,
-		sum(ra.field162) as track_Usage_Defects,
-		sum(ra.field23) as Unknown_Defects_Total,
-		sum(ra.field22) as Usage_Defects_Total,
-		sum(ra.field21) as Usage_PKI_Defect_Total,
-		sum(ra.field2) as Warranty_Product
+		sum(ra.field11) as Achieved_Reliability_Metrics,
+		sum(ra.field34) as Mean_Time_To_Restoration
 	from %s.companies c 
 	join %s.formDataRA ra on c.id = ra.companyId
 	%s
@@ -595,7 +597,7 @@ func main() {
 			when month(oz.period) = 9 then 'Q3'
 			when month(oz.period) = 12 then 'Q4' end as period,
 		sum(oz.field13) as Cost_Calculator,
-		sum(oz.field7) as Post_Sale_Repair_Costs
+		sum(oz.field3) as Cost_Product
 	from %s.companies c 
 	join %s.formDataOZ oz on c.id = oz.companyId 
 	%s
@@ -607,12 +609,12 @@ func main() {
 		c.id as companyId, c.name, c.inn,
 		year(rcp.period) as year,
 		'Q4' as period,
-		sum(rcp.field10) as Contracts_Realize,
-		sum(rcp.field2) as Cost_Product,
-		sum(rcp.field131) as Fake_Product_Incidents_Counter,
-		sum(rcp.field8) as One_Time_Restored_Count,
 		sum(rcp.field1) as Product_Defect_Fatality_Monitor,
-		sum(rcp.field7) as Products_Requiring_Restoration
+		sum(rcp.field9) as Contract_Quality_Failure_Tracker,
+		sum(rcp.field131) as Fake_Product_Incidents_Counter,
+		sum(rcp.field8) as Products_Requiring_Restoration,
+		sum(rcp.field9) as One_Time_Restored_Count,
+		sum(rcp.field10) as Contracts_Realize
 	from %s.companies c 
 	join %s.formDataRCP rcp on c.id = rcp.companyId  
 	%s
