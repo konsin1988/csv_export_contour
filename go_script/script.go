@@ -24,35 +24,36 @@ var originColumns = []string{
 }
 
 var raMetrics = []string{
-		"Claims_count",
-		"Incoming_SON_Tracker",
-		"Suspension_Tracker",
-		"track_Usage_Defects",
-		"track_Factory_Defects",
-		"Post_Sale_Repair_Costs",
-		"Accepted_Claims",
-		"Construction_Defects_Total",
-		"Factory_Defects_Total",
-		"Usage_Defects_Total",
-		"Factory_PKI_Defect_Total",
-		"Usage_PKI_Defect_Total",
-		"Unknown_Defects_Total",
-		"False_Defects_Total",
-		"Other_Defect_Total",
-		"Deviation_From_CD_TD_Total",
-		"Warranty_Product",
-		"Presented_Product_Count",
-		"First_Pass_Accepted_Count",
-		"Manufactured_Items_Total",
-		"Deviation_Approvals_Count",
-		"Target_Reliability_Metrics",
-		"Achieved_Reliability_Metrics",
-		"Mean_Time_To_Restoration",
+	"Claims_count",
+	"Cost_Product",
+	"Incoming_SON_Tracker",
+	"Suspension_Tracker",
+	"track_Usage_Defects",
+	"track_Factory_Defects",
+	"Track_Defects",
+	"Post_Sale_Repair_Costs",
+	"Accepted_Claims",
+	"Construction_Defects_Total",
+	"Factory_Defects_Total",
+	"Usage_Defects_Total",
+	"Factory_PKI_Defect_Total",
+	"Usage_PKI_Defect_Total",
+	"Unknown_Defects_Total",
+	"False_Defects_Total",
+	"Other_Defect_Total",
+	"Deviation_From_CD_TD_Total",
+	"Warranty_Product",
+	"Presented_Product_Count",
+	"First_Pass_Accepted_Count",
+	"Manufactured_Items_Total",
+	"Deviation_Approvals_Count",
+	"Target_Reliability_Metrics",
+	"Achieved_Reliability_Metrics",
+	"Mean_Time_To_Restoration",
 }
 
 var ozMetrics = []string{
 	"Cost_Calculator",
-	"Cost_Product",
 }
 
 var rcpMetrics = []string{
@@ -83,7 +84,7 @@ type Company struct {
 type CompanyInfo struct {
 	Hash string
 	Name string
-	Inn int64
+	Inn  int64
 }
 
 type Result struct {
@@ -256,7 +257,6 @@ func getPeriodRange() []YearPeriod {
 	return result
 }
 
-
 func readCompanies(path string) ([]Company, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -331,7 +331,6 @@ func readCompanies(path string) ([]Company, error) {
 	}
 	return out, nil
 }
-
 
 func mergeCompanies(companies []Company, concated []Row) []CompanyInfo {
 	byInn := make(map[int64]Company, len(companies))
@@ -484,7 +483,7 @@ func pyRepr(v float64) string {
 
 func formatValue(v float64, null bool) string {
 	if null {
-		return "0" 
+		return "0"
 	}
 	return strconv.FormatFloat(v, 'f', -1, 64)
 }
@@ -529,7 +528,7 @@ func main() {
 	dbName := os.Getenv("DB_NAME")
 	periodStart := os.Getenv("PERIOD_START")
 	periodEnd := os.Getenv("PERIOD_END")
-	var whereString string;
+	var whereString string
 
 	if periodStart != "" && periodEnd != "" {
 		whereString = fmt.Sprintf(`
@@ -543,7 +542,7 @@ func main() {
 	} else if periodStart != "" && periodEnd == "" {
 		whereString = fmt.Sprintf(`
 			where period >= '%s'
-		`, periodStart )
+		`, periodStart)
 	} else {
 		whereString = ""
 	}
@@ -558,10 +557,12 @@ func main() {
 			when month(ra.period) = 9 then 'Q3'
 			when month(ra.period) = 12 then 'Q4' end as period,
 		sum(ra.field13) as Claims_count,
+		sum(ra.field3) as Cost_Product,
 		sum(ra.field25) as Incoming_SON_Tracker,
 		sum(ra.field10) as Suspension_Tracker,
 		sum(ra.field162) as track_Usage_Defects,
 		sum(ra.field161) as track_Factory_Defects,
+		coalesce(sum(ra.field162), 0) + coalesce(sum(ra.field161), 0) as Track_Defects,
 		sum(ra.field4) as Post_Sale_Repair_Costs,
 		sum(ra.field14) as Accepted_Claims,
 		sum(ra.field18) as Construction_Defects_Total,
@@ -596,8 +597,7 @@ func main() {
 			when month(oz.period) = 6 then 'Q2'
 			when month(oz.period) = 9 then 'Q3'
 			when month(oz.period) = 12 then 'Q4' end as period,
-		sum(oz.field13) as Cost_Calculator,
-		sum(oz.field3) as Cost_Product
+		sum(oz.field13) as Cost_Calculator
 	from %s.companies c 
 	join %s.formDataOZ oz on c.id = oz.companyId 
 	%s
